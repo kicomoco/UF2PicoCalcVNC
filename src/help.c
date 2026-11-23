@@ -21,6 +21,7 @@ static const char wifi[] =
     "  Enter       Connect to network / run action\n"
     "  D / Del     Forget a saved network\n"
     "  R           Rescan\n"
+    "  U           Firmware updates\n"
     "  F2          Switch to VNC connections\n"
     "  Esc         Switch to VNC connections\n"
     "\n"
@@ -42,6 +43,7 @@ static const char vnclist[] =
     "  Enter       Connect / Edit / Delete menu\n"
     "  E           Edit selected connection\n"
     "  D / Del     Delete selected connection\n"
+    "  U           Firmware updates\n"
     "  F2 / Esc    Switch to WiFi screen\n"
     "\n"
     "Choose 'New Connection' to add a server.\n"
@@ -94,12 +96,33 @@ static const char session[] =
     "In 50%/100% zoom the view pans automatically\n"
     "when the pointer nears the screen edge.\n";
 
+static const char updates[] =
+    "Firmware updates:\n"
+    "  Current shows the running firmware version.\n"
+    "  Check GitHub finds the latest public release.\n"
+    "  WiFi is required to check or download.\n"
+    "\n"
+    "Download update & reboot needs a newer release\n"
+    "and a writable SD card. It verifies HTTPS,\n"
+    "SHA-256 and the Pico 2 UF2 format, then saves\n"
+    "the versioned UF2 under /pico2-apps/.\n"
+    "\n"
+    "The app restarts into UF2Loader automatically.\n"
+    "Select the downloaded version to install it.\n"
+    "BOOT2350.UF2 must be on the SD card.\n"
+    "Existing firmware and settings are preserved.\n"
+    "\n"
+    "Network time (UDP 123) is needed for certificate\n"
+    "date checks. Esc cancels network operations.\n"
+    "F2 switches to the other connection screen.\n";
+
 const char *help_text(int ctx) {
     switch (ctx) {
     case HELP_WIFI: return wifi;
     case HELP_VNCLIST: return vnclist;
     case HELP_FORM: return form;
     case HELP_SESSION: return session;
+    case HELP_UPDATE: return updates;
     default: return general;
     }
 }

@@ -9,6 +9,7 @@
 #include "config.h"
 #include "wifi.h"
 #include "vnc.h"
+#include "update.h"
 
 enum { SCREEN_WIFI, SCREEN_VNC };
 
@@ -243,7 +244,7 @@ static void signal_str(char *out, size_t cap, const scan_ap_t *a, bool current) 
 }
 
 static int wifi_screen(void) {
-    enum { T_AP = 0, T_RESCAN = 1000, T_HIDDEN, T_SAVED, T_DISCONNECT, T_VNC };
+    enum { T_AP = 0, T_RESCAN = 1000, T_HIDDEN, T_SAVED, T_DISCONNECT, T_VNC, T_UPDATE };
     int sel = -1;
     for (;;) {
         ui_help_ctx = HELP_WIFI;
@@ -285,6 +286,7 @@ static int wifi_screen(void) {
             {"Saved networks...", T_SAVED, g_cfg.nwifi > 0},
             {"Disconnect WiFi", T_DISCONNECT, conn},
             {"VNC connections  (F2)", T_VNC, true},
+            {"Firmware updates  (U)", T_UPDATE, true},
         };
         for (size_t a = 0; a < sizeof(acts) / sizeof(acts[0]); a++) {
             if (!acts[a].show) continue;
@@ -296,12 +298,16 @@ static int wifi_screen(void) {
         if (sel < 0) sel = naps > 0 ? first_ap : first_ap + 1;
         (void)ip;
 
-        static const int ex[] = {KEY_F2, 'r', 'R', 'd', 'D', KEY_DEL, 0};
+        static const int ex[] = {KEY_F2, 'r', 'R', 'd', 'D', KEY_DEL, 'u', 'U', 0};
         int key = 0;
         int r = ui_list("WiFi", "Enter: connect  R: rescan  D: forget  F2: VNC", items, n, &sel, ex, &key);
         if (r == -1) return SCREEN_VNC;
         if (r == -2) {
             if (key == KEY_F2) return SCREEN_VNC;
+            if (key == 'u' || key == 'U') {
+                if (update_screen()) return SCREEN_VNC;
+                continue;
+            }
             if (key == 'r' || key == 'R') {
                 if (wifi_available()) do_scan();
                 continue;
@@ -337,6 +343,8 @@ static int wifi_screen(void) {
             ui_status_refresh();
         } else if (tag == T_VNC) {
             return SCREEN_VNC;
+        } else if (tag == T_UPDATE) {
+            if (update_screen()) return SCREEN_VNC;
         }
     }
 }
@@ -432,15 +440,19 @@ static int vnc_screen(void) {
         it->color = C_ACCENT;
         it->tag = -1;
 
-        static const int ex[] = {KEY_F2, 'e', 'E', 'd', 'D', KEY_DEL, 0};
+        static const int ex[] = {KEY_F2, 'e', 'E', 'd', 'D', KEY_DEL, 'u', 'U', 0};
         int key = 0;
-        const char *footer = online ? "Enter: options  E: edit  D: delete  F2: WiFi"
-                                    : "No WiFi: edit only  F2: WiFi setup";
+        const char *footer = online ? "Enter: menu E: edit D: del U: updates F2: WiFi"
+                                    : "Offline: edit only  U: updates  F2: WiFi";
         int r = ui_list("VNC Connections", footer, items, n, &sel, ex, &key);
         if (r == -1) return SCREEN_WIFI;
         int idx = items[sel].tag;
         if (r == -2) {
             if (key == KEY_F2) return SCREEN_WIFI;
+            if (key == 'u' || key == 'U') {
+                if (update_screen()) return SCREEN_WIFI;
+                continue;
+            }
             if (idx < 0) continue;
             if (key == 'e' || key == 'E') {
                 vnc_entry_t v = g_cfg.vnc[idx];

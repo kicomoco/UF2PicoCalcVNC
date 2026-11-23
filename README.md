@@ -68,6 +68,15 @@ No version-bump commits are created.
 The workflow uses Pico SDK 2.2.0 and the repository's built-in `GITHUB_TOKEN`;
 no additional secrets are needed. GitHub Actions must be enabled and repository
 rules must permit the workflow to create tags and releases.
+CI caches Arm GNU Toolchain 14.2.Rel1 and verifies its download against Arm's
+published SHA-256 checksum. Only the small native build dependencies are installed
+through apt, with bounded network waits and an installation timeout.
+
+To initialise a fresh SDK checkout for builds, include its TLS dependency:
+
+```sh
+git -C "$PICO_SDK_PATH" submodule update --init lib/cyw43-driver lib/lwip lib/tinyusb lib/mbedtls
+```
 
 Local builds default to version `1.0.0`. To build a specific version:
 
@@ -81,6 +90,40 @@ cmake --build build -j8
 1. Copy `build/picocalc_vnc.uf2` to the `pico2-apps/` folder on the PicoCalc's
    SD card.
 2. Start the PicoCalc, choose **PicoCalc VNC** in UF2Loader, and launch it.
+
+## Checking for updates
+
+Press **U** on either connection screen, or select **Firmware updates** on the
+WiFi screen. The update screen shows the running version and can check the latest
+public GitHub release. When a newer version is found, select **Download update &
+reboot** and confirm.
+
+The app downloads the release checksum and UF2 using HTTPS with certificate,
+hostname and validity-date verification. It obtains network time from
+Cloudflare NTP (outbound UDP port 123 must be allowed). Trust anchors are
+ISRG Root X1 and USERTrust ECC in `src/update-ca.pem`; certificate-chain changes
+at GitHub may require a manually installed firmware with updated roots.
+The SHA-256 checksum and RP2350 ARM secure UF2 blocks are checked by reading the
+download back from the SD card. This is a checksum from the same GitHub release,
+not an independent firmware signature.
+
+Only a completely verified download is renamed to
+`/pico2-apps/picocalc_vnc-vVERSION.uf2`. Existing app files and settings are not
+replaced. After verification the app **automatically reboots into UF2Loader**.
+Select the downloaded version there to install it. `BOOT2350.UF2` must be at the
+SD-card root. Esc cancels an in-progress request without rebooting.
+
+A first release must be published before the checker can find an update; private
+repositories and prerelease version tags are not supported. The firmware does
+not check in the background or write its own flash. The SD download and automatic
+UF2Loader reboot still need verification on a PicoCalc.
+
+Updater format tests can be run on the host:
+
+```sh
+cc -Isrc tests/update_format_test.c src/update_format.c -o /tmp/update-format-test
+/tmp/update-format-test build/picocalc_vnc.uf2
+```
 
 ## Configuration
 

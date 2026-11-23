@@ -19,7 +19,7 @@
 // Special key code returned when the screen must be redrawn (e.g. after help)
 #define UI_KEY_REDRAW 0x01
 
-enum { HELP_GENERAL, HELP_WIFI, HELP_VNCLIST, HELP_FORM, HELP_SESSION };
+enum { HELP_GENERAL, HELP_WIFI, HELP_VNCLIST, HELP_FORM, HELP_SESSION, HELP_UPDATE };
 extern int ui_help_ctx;
 
 void ui_init(void);

@@ -15,8 +15,6 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      PICO_TOOLCHAIN_PATH: /usr
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -50,16 +48,44 @@ jobs:
             core.setOutput('tag', `v${version}`);
 
       - name: Install build dependencies
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get \
+            -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 \
+            install -y --no-install-recommends cmake ninja-build libusb-1.0-0-dev
+
+      - name: Cache Arm GNU toolchain
+        id: toolchain
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi
+          key: arm-gnu-14.2.rel1-linux-x86_64-arm-none-eabi
+
+      - name: Set up Arm GNU toolchain
+        timeout-minutes: 10
+        env:
+          CACHE_HIT: ${{ steps.toolchain.outputs.cache-hit }}
+          PICO_TOOLCHAIN_PATH: ${{ runner.temp }}/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi
+        run: |
+          if [ "$CACHE_HIT" != "true" ]; then
+            archive="$RUNNER_TEMP/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz"
+            curl --fail --location --retry 2 --connect-timeout 30 --max-time 180 \
+              https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz \
+              --output "$archive"
+            echo "62a63b981fe391a9cbad7ef51b17e49aeaa3e7b0d029b36ca1e9c3b2a9b78823  $archive" | sha256sum --check
+            tar -xJf "$archive" -C "$RUNNER_TEMP"
+            rm "$archive"
+          fi
+          "$PICO_TOOLCHAIN_PATH/bin/arm-none-eabi-gcc" --version
+          echo "PICO_TOOLCHAIN_PATH=$PICO_TOOLCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Download Pico SDK 2.2.0
         env:
           PICO_SDK_PATH: ${{ runner.temp }}/pico-sdk
         run: |
           git clone --branch 2.2.0 --depth 1 https://github.com/raspberrypi/pico-sdk.git "$PICO_SDK_PATH"
-          git -C "$PICO_SDK_PATH" submodule update --init --depth 1 lib/cyw43-driver lib/lwip lib/tinyusb
+          git -C "$PICO_SDK_PATH" submodule update --init --depth 1 lib/cyw43-driver lib/lwip lib/tinyusb lib/mbedtls
           echo "PICO_SDK_PATH=$PICO_SDK_PATH" >> "$GITHUB_ENV"
 
       - name: Configure firmware
@@ -72,6 +98,11 @@ jobs:
 
       - name: Build firmware
         run: cmake --build build --parallel 2
+
+      - name: Test updater format validation
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -Isrc tests/update_format_test.c src/update_format.c -o build/update-format-test
+          build/update-format-test build/picocalc_vnc.uf2
 
       - name: Prepare release assets
         env:

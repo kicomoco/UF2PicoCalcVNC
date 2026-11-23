@@ -36,6 +36,9 @@ add_executable(picocalc_vnc
     src/net.c
     src/des.c
     src/vnc.c
+    src/https.c
+    src/update.c
+    src/update_format.c
     third_party/fatfs/ff.c
     third_party/fatfs/ffunicode.c
     third_party/miniz/miniz_tinfl.c
@@ -49,6 +52,7 @@ target_include_directories(picocalc_vnc PRIVATE
 
 target_compile_definitions(picocalc_vnc PRIVATE
     CYW43_HOST_NAME=\"PicoCalc-VNC\"
+    PICOCALC_VNC_VERSION=\"${PROJECT_VERSION}\"
     PICO_STACK_SIZE=0x1000
     PICO_CORE1_STACK_SIZE=0x800
 )
@@ -64,7 +68,15 @@ target_link_libraries(picocalc_vnc
     pico_cyw43_arch_lwip_poll
     hardware_spi
     hardware_i2c
+    hardware_watchdog
+    pico_mbedtls
 )
+
+file(READ "${CMAKE_CURRENT_LIST_DIR}/src/update-ca.pem" UPDATE_CA)
+string(REPLACE "\n" "\\n\"\n\"" UPDATE_CA "${UPDATE_CA}")
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/update_ca.h"
+    CONTENT "static const char update_ca[] = \"@UPDATE_CA@\";\n" @ONLY)
+target_include_directories(picocalc_vnc PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
 pico_set_program_name(picocalc_vnc "PicoCalc VNC")
 pico_set_program_description(picocalc_vnc "VNC client for the ClockworkPi PicoCalc")
