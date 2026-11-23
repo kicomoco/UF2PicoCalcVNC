@@ -100,7 +100,12 @@ static void parse(char *text) {
         vnc_entry_t *e = &g_cfg.vnc[i];
         if (!e->host[0]) continue;
         if (!e->port) e->port = 5900;
-        if (!e->name[0]) snprintf(e->name, sizeof(e->name), "%s", e->host);
+        if (!e->name[0]) {
+            size_t len = strlen(e->host);
+            if (len >= sizeof(e->name)) len = sizeof(e->name) - 1;
+            memcpy(e->name, e->host, len);
+            e->name[len] = 0;
+        }
         g_cfg.vnc[j++] = *e;
     }
     g_cfg.nvnc = j;

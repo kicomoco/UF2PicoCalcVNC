@@ -177,6 +177,7 @@ static void test_configuration(void) {
     assert(config_save());
     assert(config_init() && g_cfg.screen_brightness == 10 && g_cfg.keyboard_brightness == 0);
     assert(g_cfg.nvnc == 1 && !strcmp(g_cfg.vnc[0].host, "example.test"));
+    assert(!strcmp(g_cfg.vnc[0].name, "example.test"));
     assert(settings_apply_saved() && registers[SB_REG_BKL] == 32 && registers[SB_REG_BK2] == 0);
     g_cfg.screen_brightness = -1;
     g_cfg.keyboard_brightness = 100;
@@ -185,6 +186,10 @@ static void test_configuration(void) {
     assert(config_init() && g_cfg.screen_brightness == -1 && g_cfg.keyboard_brightness == -1);
     strcpy(files[0].text, "[general]\nscreen_brightness=50junk\nkeyboard_brightness=\n");
     assert(config_init() && g_cfg.screen_brightness == -1 && g_cfg.keyboard_brightness == -1);
+    strcpy(files[0].text, "[vnc]\nhost=abcdefghijklmnopqrstuvwxyz0123456789.example\n");
+    assert(config_init() && g_cfg.nvnc == 1);
+    assert(!strcmp(g_cfg.vnc[0].name, "abcdefghijklmnopqrstuvwxyz01234"));
+    assert(!strcmp(g_cfg.vnc[0].host, "abcdefghijklmnopqrstuvwxyz0123456789.example"));
     no_sd = true;
     assert(!config_init() && g_cfg.screen_brightness == -1 && g_cfg.keyboard_brightness == -1);
     no_sd = false;
