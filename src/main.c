@@ -10,6 +10,7 @@
 #include "wifi.h"
 #include "vnc.h"
 #include "update.h"
+#include "settings.h"
 
 enum { SCREEN_WIFI, SCREEN_VNC };
 
@@ -26,6 +27,7 @@ static bool cancel_cb(void) { return ui_cancel_requested(); }
 static void do_scan(void) {
     ui_progress("WiFi", "Scanning for networks...");
     naps = wifi_scan(aps, MAX_SCAN, cancel_cb);
+    ui_progress_end();
     if (naps < 0) naps = 0;
 }
 
@@ -41,6 +43,7 @@ static int connect_with_ui(const char *ssid, const char *pass, uint32_t auth_hin
     snprintf(msg, sizeof(msg), "Connecting to %s ...", ssid);
     ui_progress("WiFi", msg);
     int r = wifi_connect(ssid, pass, auth_hint, auth_used, cancel_cb);
+    ui_progress_end();
     if (r == WIFI_OK) ui_status_refresh();
     return r;
 }
@@ -244,7 +247,7 @@ static void signal_str(char *out, size_t cap, const scan_ap_t *a, bool current) 
 }
 
 static int wifi_screen(void) {
-    enum { T_AP = 0, T_RESCAN = 1000, T_HIDDEN, T_SAVED, T_DISCONNECT, T_VNC, T_UPDATE };
+    enum { T_AP = 0, T_RESCAN = 1000, T_HIDDEN, T_SAVED, T_DISCONNECT, T_VNC, T_UPDATE, T_SETTINGS };
     int sel = -1;
     for (;;) {
         ui_help_ctx = HELP_WIFI;
@@ -287,6 +290,7 @@ static int wifi_screen(void) {
             {"Disconnect WiFi", T_DISCONNECT, conn},
             {"VNC connections  (F2)", T_VNC, true},
             {"Firmware updates  (U)", T_UPDATE, true},
+            {"Brightness settings  (S)", T_SETTINGS, true},
         };
         for (size_t a = 0; a < sizeof(acts) / sizeof(acts[0]); a++) {
             if (!acts[a].show) continue;
@@ -298,12 +302,16 @@ static int wifi_screen(void) {
         if (sel < 0) sel = naps > 0 ? first_ap : first_ap + 1;
         (void)ip;
 
-        static const int ex[] = {KEY_F2, 'r', 'R', 'd', 'D', KEY_DEL, 'u', 'U', 0};
+        static const int ex[] = {KEY_F2, 'r', 'R', 'd', 'D', KEY_DEL, 'u', 'U', 's', 'S', 0};
         int key = 0;
-        int r = ui_list("WiFi", "Enter: connect  R: rescan  D: forget  F2: VNC", items, n, &sel, ex, &key);
+        int r = ui_list("WiFi", "Enter: join R: scan S: settings U: updates F2: VNC", items, n, &sel, ex, &key);
         if (r == -1) return SCREEN_VNC;
         if (r == -2) {
             if (key == KEY_F2) return SCREEN_VNC;
+            if (key == 's' || key == 'S') {
+                settings_screen();
+                continue;
+            }
             if (key == 'u' || key == 'U') {
                 if (update_screen()) return SCREEN_VNC;
                 continue;
@@ -345,6 +353,8 @@ static int wifi_screen(void) {
             return SCREEN_VNC;
         } else if (tag == T_UPDATE) {
             if (update_screen()) return SCREEN_VNC;
+        } else if (tag == T_SETTINGS) {
+            settings_screen();
         }
     }
 }
@@ -440,15 +450,19 @@ static int vnc_screen(void) {
         it->color = C_ACCENT;
         it->tag = -1;
 
-        static const int ex[] = {KEY_F2, 'e', 'E', 'd', 'D', KEY_DEL, 'u', 'U', 0};
+        static const int ex[] = {KEY_F2, 'e', 'E', 'd', 'D', KEY_DEL, 'u', 'U', 's', 'S', 0};
         int key = 0;
-        const char *footer = online ? "Enter: menu E: edit D: del U: updates F2: WiFi"
-                                    : "Offline: edit only  U: updates  F2: WiFi";
+        const char *footer = online ? "E: edit D: del S: settings U: updates F2: WiFi"
+                                    : "Offline S: settings U: updates F2: WiFi";
         int r = ui_list("VNC Connections", footer, items, n, &sel, ex, &key);
         if (r == -1) return SCREEN_WIFI;
         int idx = items[sel].tag;
         if (r == -2) {
             if (key == KEY_F2) return SCREEN_WIFI;
+            if (key == 's' || key == 'S') {
+                settings_screen();
+                continue;
+            }
             if (key == 'u' || key == 'U') {
                 if (update_screen()) return SCREEN_WIFI;
                 continue;
@@ -525,9 +539,10 @@ int main(void) {
     kbd_init();
 
     ui_clear("PicoCalc VNC", "F1: help");
-    ui_progress("Starting", "Initialising WiFi and SD card...");
+    ui_progress_note("Starting", "Initialising WiFi and SD card...");
 
     bool storage = config_init();
+    bool brightness_ok = settings_apply_saved();
     bool wifi_ok = wifi_init();
     ui_status_refresh();
 
@@ -535,6 +550,7 @@ int main(void) {
         ui_message("No SD card",
                    "Could not read the SD card. Saved networks and connections will not be remembered.");
     if (!wifi_ok) ui_message("WiFi error", "The WiFi chip could not be initialised.");
+    if (!brightness_ok) ui_message("Brightness error", "Could not apply saved brightness to the controller.");
 
     int screen = SCREEN_WIFI;
     if (auto_connect()) screen = SCREEN_VNC;

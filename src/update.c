@@ -29,6 +29,7 @@ static uint64_t last_progress;
 static bool idle(void) {
     int key = ui_getkey();
     if (key == UI_KEY_REDRAW) ui_progress("Updates", progress_text);
+    else ui_progress_tick();
     return key != KEY_ESC;
 }
 
@@ -147,7 +148,7 @@ static bool download(void) {
 }
 
 static void reboot_loader(void) {
-    progress("Verified. Rebooting to UF2Loader...");
+    ui_progress_note("Updates", "Verified. Rebooting to UF2Loader...");
     sleep_ms(500);
     // UF2Loader stage3 command protocol: magic, BOOT_SD, argument.
     watchdog_hw->scratch[1] = 1;
@@ -192,6 +193,7 @@ bool update_screen(void) {
         error_text[0] = 0;
         bool ok = result == 2 ? check_latest() : download();
         https_free();
+        ui_progress_end();
         if (!ok) ui_message("Update failed", error_text);
         else if (result == 3) reboot_loader();
         else {

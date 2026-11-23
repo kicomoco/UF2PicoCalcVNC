@@ -42,6 +42,25 @@ In lists: Up/Down select and Enter acts on the selection. On the WiFi screen,
 R rescans and D/Del forgets a saved network. On the VNC screen, E edits and
 D/Del deletes a connection.
 
+WiFi scans and connections, VNC connections, and firmware updates show a
+spinning activity indicator. Press Esc to cancel these operations.
+
+## Brightness settings
+
+Press **S** on either connection screen, choose **Brightness settings** on the
+WiFi screen, or open **F2 > Brightness settings** during a VNC session.
+Use Up/Down to select a field and Left/Right to choose a level, then select
+**Apply & Save**. Cancel/Esc leaves brightness unchanged.
+
+- Screen: **10-100%**, so the app cannot accidentally turn the display off.
+- Keyboard: **Off or 10-100%**.
+- Levels are approximate: the PicoCalc controller rounds to discrete PWM steps,
+  so adjacent percentage options can produce the same physical brightness.
+- Preferences are stored as `screen_brightness` and `keyboard_brightness` in the
+  `[general]` section of `/picocalc-vnc.ini`, and restored at startup.
+- Existing configurations without these settings retain the controller's current
+  brightness. Without an SD card, changes apply only for the current session.
+
 ## Building
 
 You need the Pico SDK 2.2.0 and the ARM toolchain. The defaults expect the VS

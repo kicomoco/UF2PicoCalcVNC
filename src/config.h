@@ -32,6 +32,8 @@ typedef struct {
     vnc_entry_t vnc[MAX_VNC];
     int nvnc;
     int last_vnc;
+    int screen_brightness;       // percent, 10..100; -1 preserves the controller setting
+    int keyboard_brightness;     // percent, 0..100; -1 preserves the controller setting
 } config_t;
 
 extern config_t g_cfg;

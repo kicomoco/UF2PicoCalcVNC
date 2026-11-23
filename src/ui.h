@@ -57,7 +57,10 @@ int ui_menu(const char *title, const char *const *items, const bool *disabled, i
 // --- Dialogs ---
 void ui_message(const char *title, const char *msg);
 bool ui_confirm(const char *title, const char *msg);
-void ui_progress(const char *title, const char *msg);   // draws and returns
+void ui_progress(const char *title, const char *msg);   // cancellable, animated when polled
+void ui_progress_note(const char *title, const char *msg); // non-cancellable, static
+void ui_progress_tick(void);
+void ui_progress_end(void);
 bool ui_cancel_requested(void);                          // true if Esc was pressed
 
 // --- Forms ---

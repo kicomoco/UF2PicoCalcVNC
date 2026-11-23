@@ -12,6 +12,7 @@
 #include "des.h"
 #include "wifi.h"
 #include "miniz.h"
+#include "settings.h"
 
 #define MAX_FB_DIM 4096
 #define ERR_PROTO  (-1000)
@@ -892,7 +893,7 @@ static const char *const zoom_names[ZOOM_COUNT] = {"Fit", "50%", "100%"};
 // Returns true if the user chose to disconnect
 static bool special_menu(void) {
     static int last = 0;
-    enum { A_MIDDLE = NCOMBO, A_WUP, A_WDOWN, A_ARROWS, A_ZOOM, A_REFRESH, A_DISC, A_N };
+    enum { A_MIDDLE = NCOMBO, A_WUP, A_WDOWN, A_ARROWS, A_ZOOM, A_REFRESH, A_SETTINGS, A_DISC, A_N };
     const char *items[A_N];
     char arrows[40], zoomlbl[40];
     for (int i = 0; i < NCOMBO; i++) items[i] = combos[i].label;
@@ -904,6 +905,7 @@ static bool special_menu(void) {
     snprintf(zoomlbl, sizeof(zoomlbl), "Zoom: %s -> %s", zoom_names[zoom], zoom_names[(zoom + 1) % ZOOM_COUNT]);
     items[A_ZOOM] = zoomlbl;
     items[A_REFRESH] = "Refresh screen";
+    items[A_SETTINGS] = "Brightness settings";
     items[A_DISC] = "Disconnect";
 
     release_all();
@@ -929,6 +931,10 @@ static bool special_menu(void) {
     case A_ARROWS: arrow_mouse = !arrow_mouse; break;
     case A_ZOOM: set_zoom((zoom + 1) % ZOOM_COUNT); break;
     case A_REFRESH: send_update_request(false, vx, vy, vw, vh); break;
+    case A_SETTINGS:
+        settings_screen();
+        after_modal();
+        break;
     case A_DISC: return true;
     }
     return false;
@@ -1106,6 +1112,7 @@ bool vnc_session(vnc_entry_t *e, char *err, int errlen) {
         handshake(e);
         connected = true;
 
+        ui_progress_end();
         net_set_idle(session_idle);
         ui_suspend_status();
         kbd_flush();
@@ -1150,6 +1157,7 @@ bool vnc_session(vnc_entry_t *e, char *err, int errlen) {
         code = 0;
     }
 
+    ui_progress_end();
     net_set_idle(NULL);
     if (code == 0 || code == ERR_USER || code == NET_ERR_ABORTED) {
         if (connected) {

@@ -39,6 +39,7 @@ add_executable(picocalc_vnc
     src/https.c
     src/update.c
     src/update_format.c
+    src/settings.c
     third_party/fatfs/ff.c
     third_party/fatfs/ffunicode.c
     third_party/miniz/miniz_tinfl.c

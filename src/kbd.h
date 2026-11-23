@@ -56,4 +56,8 @@ bool kbd_alt(void);
 bool kbd_shift(void);
 int  kbd_battery(void);        // percent (0-100), -1 if unknown
 bool kbd_charging(void);
+// Brightness percentages: screen 10..100, keyboard 0..100 (0 = off).
+// The southbridge quantizes these to its supported PWM levels.
+bool kbd_get_brightness(uint8_t *screen, uint8_t *keyboard);
+bool kbd_set_brightness(int screen, int keyboard); // -1 leaves that backlight unchanged
 static inline bool kbd_is_mod(uint8_t k) { return k >= KEY_MOD_ALT && k <= KEY_MOD_CTRL; }

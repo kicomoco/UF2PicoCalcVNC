@@ -11,6 +11,7 @@ static const char general[] =
     "  F4      Left mouse button (hold to drag)\n"
     "  F5      Right mouse button\n"
     "  Arrows  Move the mouse pointer\n"
+    "  S       Brightness settings (connection screens)\n"
     "\n"
     "Settings are stored on the SD card in\n"
     "/picocalc-vnc.ini (passwords in plain text).\n";
@@ -22,6 +23,7 @@ static const char wifi[] =
     "  D / Del     Forget a saved network\n"
     "  R           Rescan\n"
     "  U           Firmware updates\n"
+    "  S           Brightness settings\n"
     "  F2          Switch to VNC connections\n"
     "  Esc         Switch to VNC connections\n"
     "\n"
@@ -44,6 +46,7 @@ static const char vnclist[] =
     "  E           Edit selected connection\n"
     "  D / Del     Delete selected connection\n"
     "  U           Firmware updates\n"
+    "  S           Brightness settings\n"
     "  F2 / Esc    Switch to WiFi screen\n"
     "\n"
     "Choose 'New Connection' to add a server.\n"
@@ -92,6 +95,7 @@ static const char session[] =
     "Ctrl and Alt combine with the next key.\n"
     "Use the F2 menu for Ctrl+Alt+Del, Alt+Tab,\n"
     "Esc, Windows key, F1-F12, middle click etc.\n"
+    "Brightness settings are also in the F2 menu.\n"
     "\n"
     "In 50%/100% zoom the view pans automatically\n"
     "when the pointer nears the screen edge.\n";

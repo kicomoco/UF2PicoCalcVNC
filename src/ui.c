@@ -20,6 +20,9 @@ extern const char *help_text(int ctx);
 static char hdr_title[40];
 static uint64_t last_status_us;
 static bool in_help;
+static bool progress_active;
+static int progress_hint_y;
+static uint64_t progress_frame;
 
 void ui_init(void) {
     lcd_fill(0, 0, LCD_W, LCD_H, C_BG);
@@ -405,6 +408,7 @@ static int draw_textbox(const char *title, const char *msg, const char *hint, ui
     box_strip_begin(4);
     box_strip_end(y);
     y += 4;
+    int hint_y = y;
     if (hint) {
         box_strip_begin(f->h + 6);
         int w = text_width(hint, f);
@@ -413,7 +417,7 @@ static int draw_textbox(const char *title, const char *msg, const char *hint, ui
         y += f->h + 6;
     }
     box_bottom(y);
-    return y0;
+    return hint_y;
 }
 
 void ui_message(const char *title, const char *msg) {
@@ -445,12 +449,43 @@ bool ui_confirm(const char *title, const char *msg) {
     }
 }
 
+static void progress_hint(char hint[20], uint64_t frame) {
+    snprintf(hint, 20, "Esc = cancel   %c", "|/-\\"[frame % 4]);
+}
+
 void ui_progress(const char *title, const char *msg) {
-    draw_textbox(title, msg, "Esc = cancel", C_TEXT);
+    char hint[20];
+    progress_frame = time_us_64() / 200000;
+    progress_hint(hint, progress_frame);
+    progress_hint_y = draw_textbox(title, msg, hint, C_TEXT);
+    progress_active = true;
+}
+
+void ui_progress_note(const char *title, const char *msg) {
+    progress_active = false;
+    draw_textbox(title, msg, "Please wait", C_TEXT);
+}
+
+void ui_progress_tick(void) {
+    if (!progress_active) return;
+    uint64_t frame = time_us_64() / 200000;
+    if (frame == progress_frame) return;
+    progress_frame = frame;
+    char hint[20];
+    progress_hint(hint, frame);
+    box_strip_begin(font_6x12.h + 6);
+    int w = text_width(hint, &font_6x12);
+    cv_text(BOX_X + (BOX_W - w) / 2, 3, hint, &font_6x12, C_DIM);
+    box_strip_end(progress_hint_y);
+}
+
+void ui_progress_end(void) {
+    progress_active = false;
 }
 
 bool ui_cancel_requested(void) {
     ui_poll();
+    ui_progress_tick();
     kev_t e;
     while (kbd_get(&e)) {
         if (e.state == KEY_STATE_PRESSED && e.key == KEY_ESC) return true;

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "ff.h"
 
 config_t g_cfg;
@@ -23,6 +24,17 @@ static void copy_unescape(char *dst, size_t cap, const char *src) {
         dst[n++] = c;
     }
     dst[n] = 0;
+}
+
+static int parse_brightness(const char *text, int minimum) {
+    char *end;
+    errno = 0;
+    long value = strtol(text, &end, 10);
+    if (errno || end == text || *end || value < minimum || value > 100) {
+        printf("Ignoring invalid brightness setting: %s\n", text);
+        return -1;
+    }
+    return (int)value;
 }
 
 static void parse(char *text) {
@@ -71,6 +83,8 @@ static void parse(char *text) {
                     else if (!strcmp(k, "zoom")) v->zoom = (uint8_t)(atoi(val) % ZOOM_COUNT);
                 } else if (sec == SEC_GENERAL) {
                     if (!strcmp(k, "last_vnc")) g_cfg.last_vnc = atoi(val);
+                    else if (!strcmp(k, "screen_brightness")) g_cfg.screen_brightness = parse_brightness(val, 10);
+                    else if (!strcmp(k, "keyboard_brightness")) g_cfg.keyboard_brightness = parse_brightness(val, 0);
                 }
             }
         }
@@ -95,6 +109,7 @@ static void parse(char *text) {
 
 bool config_init(void) {
     memset(&g_cfg, 0, sizeof(g_cfg));
+    g_cfg.screen_brightness = g_cfg.keyboard_brightness = -1;
     mounted = f_mount(&fs, "", 1) == FR_OK;
     if (!mounted) return false;
     FIL f;
@@ -152,6 +167,10 @@ bool config_save(void) {
     wbuf_t b = {filebuf, sizeof(filebuf), false};
     put(&b, "# PicoCalc VNC settings\n[general]\n");
     put_ki(&b, "last_vnc", (unsigned long)g_cfg.last_vnc);
+    if (g_cfg.screen_brightness >= 0)
+        put_ki(&b, "screen_brightness", (unsigned long)g_cfg.screen_brightness);
+    if (g_cfg.keyboard_brightness >= 0)
+        put_ki(&b, "keyboard_brightness", (unsigned long)g_cfg.keyboard_brightness);
     for (int i = 0; i < g_cfg.nwifi; i++) {
         wifi_entry_t *w = &g_cfg.wifi[i];
         put(&b, "\n[wifi]\n");
