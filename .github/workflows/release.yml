@@ -1,0 +1,112 @@
+name: Build and release firmware
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: firmware-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PICO_TOOLCHAIN_PATH: /usr
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Select next version
+        id: version
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tags = await github.paginate(github.rest.repos.listTags, {
+              ...context.repo, per_page: 100
+            });
+            const versions = tags
+              .filter(tag => /^v\d+\.\d+\.\d+$/.test(tag.name))
+              .map(tag => ({
+                ...tag,
+                parts: tag.name.slice(1).split('.').map(Number)
+              }))
+              .sort((a, b) => b.parts[0] - a.parts[0] ||
+                b.parts[1] - a.parts[1] || b.parts[2] - a.parts[2]);
+            // A retry of an already released commit must reuse its version.
+            const existing = versions.find(tag => tag.commit.sha === context.sha);
+            let version = '1.0.0';
+            if (existing) {
+              version = existing.name.slice(1);
+            } else if (versions.length) {
+              const [major, minor, patch] = versions[0].parts;
+              version = `${major}.${minor}.${patch + 1}`;
+            }
+            core.setOutput('number', version);
+            core.setOutput('tag', `v${version}`);
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev
+
+      - name: Download Pico SDK 2.2.0
+        env:
+          PICO_SDK_PATH: ${{ runner.temp }}/pico-sdk
+        run: |
+          git clone --branch 2.2.0 --depth 1 https://github.com/raspberrypi/pico-sdk.git "$PICO_SDK_PATH"
+          git -C "$PICO_SDK_PATH" submodule update --init --depth 1 lib/cyw43-driver lib/lwip lib/tinyusb
+          echo "PICO_SDK_PATH=$PICO_SDK_PATH" >> "$GITHUB_ENV"
+
+      - name: Configure firmware
+        env:
+          FIRMWARE_VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPICOCALC_VNC_VERSION="$FIRMWARE_VERSION"
+
+      - name: Build firmware
+        run: cmake --build build --parallel 2
+
+      - name: Prepare release assets
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          test -s build/picocalc_vnc.uf2
+          mkdir -p dist
+          cp build/picocalc_vnc.uf2 "dist/picocalc_vnc-${TAG}.uf2"
+          cd dist
+          sha256sum "picocalc_vnc-${TAG}.uf2" > SHA256SUMS
+
+      - name: Create release
+        uses: actions/github-script@v7
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        with:
+          script: |
+            const tag = process.env.TAG;
+            try {
+              await github.rest.repos.getReleaseByTag({...context.repo, tag});
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.repos.createRelease({
+                ...context.repo,
+                tag_name: tag,
+                target_commitish: context.sha,
+                name: `PicoCalc VNC ${tag}`,
+                generate_release_notes: true,
+                body: 'Copy the UF2 to pico2-apps/ on the SD card and launch it from UF2Loader.'
+              });
+            }
+
+      - name: Upload firmware and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release upload "$TAG" dist/* --clobber
