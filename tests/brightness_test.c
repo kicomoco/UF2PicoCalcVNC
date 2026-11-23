@@ -29,6 +29,7 @@ void sleep_ms(uint32_t ms) {
 void gpio_set_function(unsigned pin, unsigned function) { (void)pin; (void)function; }
 void gpio_pull_up(unsigned pin) { (void)pin; }
 void multicore_launch_core1(void (*entry)(void)) { (void)entry; }
+void lcd_spinner_service(void) {}
 void i2c_init(int bus, unsigned baud) { (void)bus; (void)baud; }
 
 int i2c_write_timeout_us(int bus, uint8_t address, const uint8_t *data,

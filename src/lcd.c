@@ -1,8 +1,18 @@
 // ST7365P LCD driver for the PicoCalc (RGB565 over 4-wire SPI)
 #include "lcd.h"
+#include <stdatomic.h>
 #include "board.h"
+#include "font.h"
 #include "pico/stdlib.h"
+#include "pico/mutex.h"
 #include "hardware/spi.h"
+
+static mutex_t lcd_mutex;
+// SPI transactions and spinner state share this mutex across the two cores.
+static atomic_bool spinner_enabled;
+static int spinner_x, spinner_y;
+static uint16_t spinner_fg, spinner_bg;
+static uint64_t spinner_frame;
 
 static void lcd_deselect(void) {
     gpio_put(LCD_PIN_CS, 1);
@@ -30,6 +40,7 @@ static void lcd_cmd_data(uint8_t c, const uint8_t *d, size_t n) {
 }
 
 void lcd_init(void) {
+    mutex_init(&lcd_mutex);
     spi_init(LCD_SPI, LCD_BAUD);
     spi_set_format(LCD_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
     gpio_set_function(LCD_PIN_SCK, GPIO_FUNC_SPI);
@@ -67,7 +78,7 @@ void lcd_init(void) {
     sleep_ms(20);
 }
 
-void lcd_begin(int x, int y, int w, int h) {
+static void lcd_begin_locked(int x, int y, int w, int h) {
     int x1 = x + w - 1, y1 = y + h - 1;
     lcd_cmd_data(0x2A, (const uint8_t[]){x >> 8, x & 0xFF, x1 >> 8, x1 & 0xFF}, 4);
     lcd_cmd_data(0x2B, (const uint8_t[]){y >> 8, y & 0xFF, y1 >> 8, y1 & 0xFF}, 4);
@@ -77,13 +88,59 @@ void lcd_begin(int x, int y, int w, int h) {
     gpio_put(LCD_PIN_CS, 0);
 }
 
+void lcd_begin(int x, int y, int w, int h) {
+    mutex_enter_blocking(&lcd_mutex);
+    lcd_begin_locked(x, y, w, h);
+}
+
 void lcd_push(const uint16_t *px, size_t n) {
     spi_write16_blocking(LCD_SPI, px, n);
 }
 
-void lcd_end(void) {
+static void lcd_end_locked(void) {
     lcd_deselect();
     spi_set_format(LCD_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+}
+
+void lcd_end(void) {
+    lcd_end_locked();
+    mutex_exit(&lcd_mutex);
+}
+
+void lcd_spinner_start(int x, int y, uint16_t fg, uint16_t bg) {
+    mutex_enter_blocking(&lcd_mutex);
+    spinner_x = x;
+    spinner_y = y;
+    spinner_fg = fg;
+    spinner_bg = bg;
+    spinner_frame = time_us_64() / 200000;
+    atomic_store_explicit(&spinner_enabled, true, memory_order_release);
+    mutex_exit(&lcd_mutex);
+}
+
+void lcd_spinner_stop(void) {
+    if (!atomic_load_explicit(&spinner_enabled, memory_order_acquire)) return;
+    mutex_enter_blocking(&lcd_mutex);
+    atomic_store_explicit(&spinner_enabled, false, memory_order_release);
+    mutex_exit(&lcd_mutex);
+}
+
+void lcd_spinner_service(void) {
+    if (!atomic_load_explicit(&spinner_enabled, memory_order_acquire)) return;
+    uint64_t frame = time_us_64() / 200000;
+    if (!mutex_try_enter(&lcd_mutex, NULL)) return;
+    if (atomic_load_explicit(&spinner_enabled, memory_order_relaxed) && frame != spinner_frame) {
+        spinner_frame = frame;
+        const uint8_t *glyph = font_glyph(&font_6x12, "|/-\\"[frame % 4]);
+        uint16_t pixels[6 * 12];
+        for (int y = 0; y < 12; y++)
+            for (int x = 0; x < 6; x++)
+                pixels[y * 6 + x] = (glyph[y] & (0x80 >> x)) ? spinner_fg : spinner_bg;
+        lcd_begin_locked(spinner_x, spinner_y, 6, 12);
+        lcd_push(pixels, 6 * 12);
+        lcd_end_locked();
+    }
+    mutex_exit(&lcd_mutex);
 }
 
 static bool clip(int *x, int *y, int *w, int *h) {

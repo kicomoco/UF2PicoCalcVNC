@@ -104,6 +104,11 @@ jobs:
           cc -std=c11 -Wall -Wextra -Werror -Isrc tests/update_format_test.c src/update_format.c -o build/update-format-test
           build/update-format-test build/picocalc_vnc.uf2
 
+      - name: Test updater download and replacement
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -ffunction-sections -fdata-sections -Itests/stubs -Ithird_party/fatfs tests/update_download_test.c -Wl,--gc-sections -o build/update-download-test
+          build/update-download-test
+
       - name: Test brightness settings
         run: |
           cc -std=c11 -Wall -Wextra -Werror -Itests/stubs -Ithird_party/fatfs tests/brightness_test.c -o build/brightness-test
@@ -113,6 +118,8 @@ jobs:
         run: |
           cc -std=c11 -Wall -Wextra -Werror -ffunction-sections -fdata-sections -Itests/stubs tests/progress_test.c -Wl,--gc-sections -o build/progress-test
           build/progress-test
+          cc -std=c11 -Wall -Wextra -Werror -pthread -Itests/stubs tests/lcd_spinner_test.c src/font_6x12.c -o build/lcd-spinner-test
+          build/lcd-spinner-test
 
       - name: Prepare release assets
         env:

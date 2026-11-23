@@ -20,9 +20,6 @@ extern const char *help_text(int ctx);
 static char hdr_title[40];
 static uint64_t last_status_us;
 static bool in_help;
-static bool progress_active;
-static int progress_hint_y;
-static uint64_t progress_frame;
 
 void ui_init(void) {
     lcd_fill(0, 0, LCD_W, LCD_H, C_BG);
@@ -68,6 +65,7 @@ void ui_footer(const char *text) {
 }
 
 void ui_clear(const char *title, const char *footer) {
+    lcd_spinner_stop();
     ui_header(title);
     lcd_fill(0, HDR_H, LCD_W, FOOT_Y - HDR_H, C_BG);
     ui_footer(footer);
@@ -133,6 +131,7 @@ static int wrap(const char *s, int maxc, const char **st, int *ln, int maxl) {
 
 void ui_help(int ctx) {
     if (in_help) return;
+    lcd_spinner_stop();
     in_help = true;
     const char *txt = help_text(ctx);
     static const char *st[200];
@@ -421,6 +420,7 @@ static int draw_textbox(const char *title, const char *msg, const char *hint, ui
 }
 
 void ui_message(const char *title, const char *msg) {
+    lcd_spinner_stop();
     kbd_flush();
     for (;;) {
         draw_textbox(title, msg, "Press Enter", C_TEXT);
@@ -435,6 +435,7 @@ void ui_message(const char *title, const char *msg) {
 }
 
 bool ui_confirm(const char *title, const char *msg) {
+    lcd_spinner_stop();
     kbd_flush();
     for (;;) {
         draw_textbox(title, msg, "Y / Enter = Yes    N / Esc = No", C_TEXT);
@@ -449,43 +450,26 @@ bool ui_confirm(const char *title, const char *msg) {
     }
 }
 
-static void progress_hint(char hint[20], uint64_t frame) {
-    snprintf(hint, 20, "Esc = cancel   %c", "|/-\\"[frame % 4]);
-}
-
 void ui_progress(const char *title, const char *msg) {
+    lcd_spinner_stop();
     char hint[20];
-    progress_frame = time_us_64() / 200000;
-    progress_hint(hint, progress_frame);
-    progress_hint_y = draw_textbox(title, msg, hint, C_TEXT);
-    progress_active = true;
+    snprintf(hint, sizeof(hint), "Esc = cancel   %c", "|/-\\"[(time_us_64() / 200000) % 4]);
+    int y = draw_textbox(title, msg, hint, C_TEXT);
+    int x = BOX_X + (BOX_W - text_width(hint, &font_6x12)) / 2 + 15 * font_6x12.w;
+    lcd_spinner_start(x, y + 3, C_DIM, C_BOX);
 }
 
 void ui_progress_note(const char *title, const char *msg) {
-    progress_active = false;
+    lcd_spinner_stop();
     draw_textbox(title, msg, "Please wait", C_TEXT);
 }
 
-void ui_progress_tick(void) {
-    if (!progress_active) return;
-    uint64_t frame = time_us_64() / 200000;
-    if (frame == progress_frame) return;
-    progress_frame = frame;
-    char hint[20];
-    progress_hint(hint, frame);
-    box_strip_begin(font_6x12.h + 6);
-    int w = text_width(hint, &font_6x12);
-    cv_text(BOX_X + (BOX_W - w) / 2, 3, hint, &font_6x12, C_DIM);
-    box_strip_end(progress_hint_y);
-}
-
 void ui_progress_end(void) {
-    progress_active = false;
+    lcd_spinner_stop();
 }
 
 bool ui_cancel_requested(void) {
     ui_poll();
-    ui_progress_tick();
     kev_t e;
     while (kbd_get(&e)) {
         if (e.state == KEY_STATE_PRESSED && e.key == KEY_ESC) return true;

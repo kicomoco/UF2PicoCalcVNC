@@ -16,9 +16,11 @@
 
 #define RELEASES "https://github.com/kicomoco/UF2PicoCalcVNC/releases/"
 #define UPDATE_TMP "/pico2-apps/vnc-update.tmp"
+#define UPDATE_DEST "/pico2-apps/picocalc_vnc.uf2"
+#define UPDATE_BAK "/pico2-apps/vnc-update.bak"
 #define UPDATE_MAX (8u * 1024u * 1024u)
 
-static char error_text[160], latest[40], url[256], location[256], filename[80], destination[120];
+static char error_text[160], latest[40], url[256], location[256], filename[80];
 static char checksum_text[256], progress_text[96];
 static size_t checksum_len, downloaded;
 static uint8_t expected[32], actual[32], block[512];
@@ -29,7 +31,6 @@ static uint64_t last_progress;
 static bool idle(void) {
     int key = ui_getkey();
     if (key == UI_KEY_REDRAW) ui_progress("Updates", progress_text);
-    else ui_progress_tick();
     return key != KEY_ESC;
 }
 
@@ -106,26 +107,61 @@ static bool verify_file(const char *path) {
     return true;
 }
 
+static bool recover_previous_update(void) {
+    FILINFO info;
+    FRESULT rc = f_stat(UPDATE_BAK, &info);
+    if (rc == FR_OK) {
+        if (info.fattrib & AM_DIR) return failed("Firmware backup path is a directory.");
+        rc = f_stat(UPDATE_DEST, &info);
+        if (rc == FR_NO_FILE) {
+            if (f_rename(UPDATE_BAK, UPDATE_DEST) != FR_OK)
+                return failed("Cannot restore previous firmware from vnc-update.bak.");
+        } else if (rc != FR_OK) {
+            return failed("Cannot inspect the existing firmware on the SD card.");
+        } else if (info.fattrib & AM_DIR) {
+            return failed("Firmware destination is a directory.");
+        } else if (f_unlink(UPDATE_BAK) != FR_OK) {
+            return failed("Cannot remove the previous firmware backup.");
+        }
+    } else if (rc != FR_NO_FILE) {
+        return failed("Cannot inspect the firmware backup on the SD card.");
+    }
+    return true;
+}
+
+static bool publish_update(void) {
+    FILINFO info;
+    FRESULT rc = f_stat(UPDATE_DEST, &info);
+    if (rc == FR_OK && (info.fattrib & AM_DIR)) return failed("Firmware destination is a directory.");
+    if (rc != FR_OK && rc != FR_NO_FILE) return failed("Cannot inspect the existing firmware on the SD card.");
+    rc = f_rename(UPDATE_DEST, UPDATE_BAK);
+    if (rc != FR_OK && rc != FR_NO_FILE)
+        return failed("Cannot back up the existing firmware on the SD card.");
+    bool backed_up = rc == FR_OK;
+    if (f_rename(UPDATE_TMP, UPDATE_DEST) != FR_OK) {
+        if (backed_up && f_rename(UPDATE_BAK, UPDATE_DEST) != FR_OK)
+            return failed("Could not publish update or restore firmware. Backup: vnc-update.bak.");
+        return failed("Could not publish update on SD card.");
+    }
+    if (backed_up && f_unlink(UPDATE_BAK) != FR_OK)
+        return failed("Update saved, but could not remove vnc-update.bak.");
+    return true;
+}
+
 static bool download(void) {
     static FILINFO info;
     if (f_stat("/BOOT2350.UF2", &info) != FR_OK || !info.fsize || (info.fattrib & AM_DIR))
         return failed("BOOT2350.UF2 is missing from the SD card. Cannot reboot into UF2Loader.");
     FRESULT rc = f_mkdir("/pico2-apps");
     if (rc != FR_OK && rc != FR_EXIST) return failed("Cannot create pico2-apps on the SD card.");
+    if (!recover_previous_update()) return false;
     snprintf(filename, sizeof(filename), "picocalc_vnc-%s.uf2", latest);
-    snprintf(destination, sizeof(destination), "/pico2-apps/%s", filename);
     progress("Downloading release checksum...");
     if (!https_init(idle, error_text, sizeof(error_text))) return false;
     snprintf(url, sizeof(url), RELEASES "download/%s/SHA256SUMS", latest);
     checksum_len = 0;
     if (!https_get(url, false, sizeof(checksum_text) - 1, checksum_sink, NULL, NULL, 0)) return false;
     if (!update_checksum(checksum_text, filename, expected)) return failed("Missing or invalid firmware checksum.");
-    rc = f_stat(destination, &info);
-    if (rc == FR_OK) {
-        progress("Verifying previously downloaded update...");
-        return verify_file(destination);
-    }
-    if (rc != FR_NO_FILE) return failed("Cannot inspect the destination on the SD card.");
     if (f_open(&file, UPDATE_TMP, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK)
         return failed("Cannot create update file on the SD card.");
     progress("Downloading firmware...");
@@ -138,7 +174,7 @@ static bool download(void) {
         progress("Verifying firmware from SD card...");
         ok = verify_file(UPDATE_TMP);
     }
-    if (ok && f_rename(UPDATE_TMP, destination) != FR_OK) ok = failed("Could not publish update on SD card.");
+    if (ok) ok = publish_update();
     if (!ok) {
         rc = f_unlink(UPDATE_TMP);
         if (rc != FR_OK && rc != FR_NO_FILE)
@@ -166,7 +202,7 @@ bool update_screen(void) {
         memset(entries, 0, sizeof(entries));
         snprintf(entries[0].text, sizeof(entries[0].text), "Current: %s", PICOCALC_VNC_VERSION);
         entries[0].flags = UI_ITEM_SEP;
-        snprintf(entries[1].text, sizeof(entries[1].text), "Latest: %s", latest[0] ? latest : "not checked");
+        snprintf(entries[1].text, sizeof(entries[1].text), "Latest: %.35s", latest[0] ? latest : "not checked");
         entries[1].flags = UI_ITEM_SEP;
         snprintf(entries[2].text, sizeof(entries[2].text), "Check GitHub for updates");
         snprintf(entries[3].text, sizeof(entries[3].text), "Download update & reboot");
@@ -187,7 +223,7 @@ bool update_screen(void) {
             if (!newer) { ui_message("Updates", "Check for a newer release first."); continue; }
             if (!config_storage_ok()) { ui_message("Updates", "A writable SD card is required."); continue; }
             if (!ui_confirm("Install update",
-                "Download, verify and restart into UF2Loader?\n\nSelect the versioned PicoCalc VNC UF2 in the loader to install it."))
+                "Download, verify and restart into UF2Loader?\n\nSelect picocalc_vnc.uf2 in the loader to install it."))
                 continue;
         }
         error_text[0] = 0;

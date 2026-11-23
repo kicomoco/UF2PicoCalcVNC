@@ -43,7 +43,8 @@ R rescans and D/Del forgets a saved network. On the VNC screen, E edits and
 D/Del deletes a connection.
 
 WiFi scans and connections, VNC connections, and firmware updates show a
-spinning activity indicator. Press Esc to cancel these operations.
+spinning activity indicator, not a percentage complete. Press Esc to cancel
+these operations.
 
 ## Brightness settings
 
@@ -127,9 +128,10 @@ download back from the SD card. This is a checksum from the same GitHub release,
 not an independent firmware signature.
 
 Only a completely verified download is renamed to
-`/pico2-apps/picocalc_vnc-vVERSION.uf2`. Existing app files and settings are not
-replaced. After verification the app **automatically reboots into UF2Loader**.
-Select the downloaded version there to install it. `BOOT2350.UF2` must be at the
+`/pico2-apps/picocalc_vnc.uf2`, replacing any previous file with that name.
+Other app files and settings are not replaced. After verification the app
+**automatically reboots into UF2Loader**. Select `picocalc_vnc.uf2` there to
+install it. `BOOT2350.UF2` must be at the
 SD-card root. Esc cancels an in-progress request without rebooting.
 
 A first release must be published before the checker can find an update; private

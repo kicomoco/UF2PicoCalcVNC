@@ -1,6 +1,7 @@
 #include "kbd.h"
 #include <stdatomic.h>
 #include "board.h"
+#include "lcd.h"
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "hardware/i2c.h"
@@ -65,6 +66,7 @@ static void core1_main(void) {
 
     absolute_time_t next_bat = get_absolute_time();
     for (;;) {
+        lcd_spinner_service();
         service_backlights();
         uint8_t b[2];
         if (sb_read_reg(SB_REG_FIF, b) && b[0] != 0 && b[1] != 0) {
